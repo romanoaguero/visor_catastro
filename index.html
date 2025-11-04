@@ -729,6 +729,68 @@
       attributionControl: false
     }).setView([-26.8241, -65.2226], 12);
 
+    // Parsear parámetros de URL para centrar el mapa
+    function parsearParametrosURL() {
+      const hash = window.location.hash.substring(1); // Remover el #
+      if (hash.startsWith('map=')) {
+        const params = hash.substring(4); // Remover 'map='
+        const parts = params.split('/');
+        
+        if (parts.length === 3) {
+          const zoom = parseInt(parts[0]);
+          const lat = parseFloat(parts[1]);
+          const lon = parseFloat(parts[2]);
+          
+          if (!isNaN(zoom) && !isNaN(lat) && !isNaN(lon)) {
+            // Validar que las coordenadas estén en un rango razonable para Tucumán
+            if (lat >= -28 && lat <= -25 && lon >= -67 && lon <= -64) {
+              map.setView([lat, lon], zoom);
+              
+              // Agregar un marcador temporal para indicar la ubicación
+              if (window.urlMarker) {
+                map.removeLayer(window.urlMarker);
+              }
+              
+              window.urlMarker = L.marker([lat, lon], {
+                icon: L.divIcon({
+                  className: 'search-marker-icon',
+                  html: '<div style="background-color: #9C27B0; width: 16px; height: 16px; border-radius: 50%; border: 4px solid white; box-shadow: 0 2px 10px rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; font-size: 12px;">📍</div>',
+                  iconSize: [24, 24]
+                })
+              }).addTo(map);
+              
+              // Mostrar información básica
+              document.getElementById('info-content').innerHTML = `
+                <div class="info-title">Ubicación desde URL</div>
+                <div class="info-row">
+                  <span class="info-label">Latitud</span>
+                  <span class="info-value">${lat.toFixed(6)}</span>
+                </div>
+                <div class="info-row">
+                  <span class="info-label">Longitud</span>
+                  <span class="info-value">${lon.toFixed(6)}</span>
+                </div>
+                <div class="info-row">
+                  <span class="info-label">Zoom</span>
+                  <span class="info-value">${zoom}</span>
+                </div>
+              `;
+              
+              document.getElementById('info').classList.add('expanded');
+              
+              return true;
+            }
+          }
+        }
+      }
+      return false;
+    }
+
+    // Intentar parsear parámetros de URL al cargar
+    setTimeout(() => {
+      parsearParametrosURL();
+    }, 500); // Esperar un poco para que el mapa se inicialice completamente
+
     // Capa base
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 22
@@ -1166,6 +1228,20 @@
           info.classList.remove('expanded');
         }
       }, 100);
+    });
+
+    // Actualizar URL cuando el usuario mueve el mapa
+    map.on('moveend', function() {
+      const center = map.getCenter();
+      const zoom = map.getZoom();
+      
+      // Solo actualizar si no hay un marcador de URL activo (para evitar conflictos)
+      if (!window.urlMarker || !map.hasLayer(window.urlMarker)) {
+        const newHash = `#map=${zoom}/${center.lat.toFixed(3)}/${center.lng.toFixed(3)}`;
+        if (window.location.hash !== newHash) {
+          window.location.hash = newHash;
+        }
+      }
     });
   </script>
 </body>
