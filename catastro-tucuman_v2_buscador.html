@@ -1,0 +1,1172 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <title>Visor Catastro Tucumán</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+      overflow: hidden;
+      touch-action: none;
+    }
+    
+    #map {
+      height: 100vh;
+      width: 100%;
+      position: relative;
+    }
+    
+    /* Panel de información mejorado */
+    #info {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 80px;
+      background: white;
+      padding: 16px;
+      z-index: 1000;
+      font-size: 14px;
+      border-radius: 16px 16px 0 0;
+      box-shadow: 0 -4px 20px rgba(0,0,0,0.15);
+      max-height: 40vh;
+      overflow-y: auto;
+      transform: translateY(calc(100% - 60px));
+      transition: transform 0.3s ease;
+    }
+    
+    #info.expanded {
+      transform: translateY(0);
+    }
+    
+    #info-handle {
+      width: 40px;
+      height: 4px;
+      background: #ddd;
+      border-radius: 2px;
+      margin: 0 auto 12px;
+      cursor: pointer;
+    }
+    
+    #info-content {
+      line-height: 1.6;
+    }
+    
+    /* Barra de búsqueda mejorada */
+    #search-container {
+      position: absolute;
+      top: 16px;
+      left: 16px;
+      right: 16px;
+      z-index: 1000;
+      display: flex;
+      gap: 0;
+    }
+    
+    #search-box {
+      flex: 1;
+      padding: 14px 16px;
+      border: none;
+      border-radius: 12px;
+      font-size: 16px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      background: white;
+      min-width: 0;
+    }
+    
+    #search-button {
+      padding: 14px 20px;
+      background: #4CAF50;
+      color: white;
+      border: none;
+      border-radius: 12px;
+      cursor: pointer;
+      font-size: 16px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      font-weight: 600;
+      transition: all 0.2s;
+      white-space: nowrap;
+      margin-left: 8px;
+    }
+    
+    #search-button:active {
+      transform: scale(0.95);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    }
+    
+    /* Controles flotantes */
+    .floating-controls {
+      position: absolute;
+      right: 16px;
+      z-index: 1000;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    
+    .control-btn {
+      width: 48px;
+      height: 48px;
+      background: white;
+      border: none;
+      border-radius: 12px;
+      cursor: pointer;
+      font-size: 20px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+    }
+    
+    .control-btn:active {
+      transform: scale(0.9);
+    }
+    
+    #zoom-controls {
+      bottom: 160px;
+    }
+    
+    #layer-btn {
+      bottom: 100px;
+    }
+    
+    #location-btn {
+      bottom: 40px;
+    }
+    
+    /* Panel de capas mejorado */
+    #layer-panel {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: white;
+      z-index: 2000;
+      border-radius: 16px 16px 0 0;
+      box-shadow: 0 -4px 20px rgba(0,0,0,0.2);
+      transform: translateY(100%);
+      transition: transform 0.3s ease;
+      max-height: 70vh;
+      overflow-y: auto;
+    }
+    
+    #layer-panel.active {
+      transform: translateY(0);
+    }
+    
+    #layer-panel-header {
+      padding: 16px;
+      border-bottom: 1px solid #eee;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: sticky;
+      top: 0;
+      background: white;
+      z-index: 1;
+    }
+    
+    #layer-panel-title {
+      font-size: 18px;
+      font-weight: 600;
+      color: #333;
+    }
+    
+    #close-layers {
+      background: none;
+      border: none;
+      font-size: 24px;
+      cursor: pointer;
+      color: #666;
+      padding: 4px;
+    }
+    
+    #layer-list {
+      padding: 8px 16px 24px;
+    }
+    
+    .layer-item {
+      display: flex;
+      align-items: center;
+      padding: 14px 0;
+      border-bottom: 1px solid #f0f0f0;
+    }
+    
+    .layer-item:last-child {
+      border-bottom: none;
+    }
+    
+    .layer-toggle {
+      position: relative;
+      width: 48px;
+      height: 28px;
+      margin-right: 12px;
+    }
+    
+    .layer-toggle input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+    
+    .toggle-slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: #ccc;
+      transition: 0.3s;
+      border-radius: 28px;
+    }
+    
+    .toggle-slider:before {
+      position: absolute;
+      content: "";
+      height: 20px;
+      width: 20px;
+      left: 4px;
+      bottom: 4px;
+      background-color: white;
+      transition: 0.3s;
+      border-radius: 50%;
+    }
+    
+    input:checked + .toggle-slider {
+      background-color: #4CAF50;
+    }
+    
+    input:checked + .toggle-slider:before {
+      transform: translateX(20px);
+    }
+    
+    .layer-label {
+      font-size: 15px;
+      color: #333;
+      flex: 1;
+    }
+    
+    /* Overlay para cerrar paneles */
+    #overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0,0,0,0.3);
+      z-index: 1999;
+      display: none;
+      backdrop-filter: blur(2px);
+    }
+    
+    #overlay.active {
+      display: block;
+    }
+    
+    /* Loading spinner */
+    .spinner {
+      display: none;
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 40px;
+      height: 40px;
+      border: 4px solid #f3f3f3;
+      border-top: 4px solid #4CAF50;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      z-index: 3000;
+    }
+    
+    @keyframes spin {
+      0% { transform: translate(-50%, -50%) rotate(0deg); }
+      100% { transform: translate(-50%, -50%) rotate(360deg); }
+    }
+
+    /* Cartel de advertencia inicial */
+    #warning-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.85);
+      z-index: 5000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      backdrop-filter: blur(4px);
+    }
+
+    #warning-box {
+      background: white;
+      border-radius: 20px;
+      padding: 32px 24px;
+      max-width: 400px;
+      margin: 20px;
+      text-align: center;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+      animation: fadeInScale 0.4s ease;
+    }
+
+    @keyframes fadeInScale {
+      from {
+        opacity: 0;
+        transform: scale(0.9);
+      }
+      to {
+        opacity: 1;
+        transform: scale(1);
+      }
+    }
+
+    .warning-icon {
+      width: 64px;
+      height: 64px;
+      margin: -10px auto 15px;
+      background: #FFA726;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 32px;
+      animation: pulse 2s ease-in-out infinite;
+      line-height: 0.9;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .warning-icon::before {
+      content: "⚠️";
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -60%);
+      font-size: 32px;
+      line-height: 1;
+    }
+
+    @keyframes pulse {
+      0%, 100% {
+        transform: scale(1);
+        box-shadow: 0 0 0 0 rgba(255, 167, 38, 0.4);
+      }
+      50% {
+        transform: scale(1.05);
+        box-shadow: 0 0 0 10px rgba(255, 167, 38, 0);
+      }
+    }
+
+    .warning-title {
+      font-size: 20px;
+      font-weight: 600;
+      color: #333;
+      margin-bottom: 12px;
+    }
+
+    .warning-message {
+      font-size: 15px;
+      color: #666;
+      line-height: 1.6;
+      margin-bottom: 24px;
+    }
+
+    .warning-button {
+      background: #4CAF50;
+      color: white;
+      border: none;
+      border-radius: 12px;
+      padding: 14px 32px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3);
+    }
+
+    .warning-button:hover {
+      background: #45a049;
+      transform: translateY(-2px);
+      box-shadow: 0 6px 16px rgba(76, 175, 80, 0.4);
+    }
+
+    .warning-button:active {
+      transform: translateY(0);
+    }
+
+    .loading-spinner {
+      width: 20px;
+      height: 20px;
+      border: 3px solid #f3f3f3;
+      border-top: 3px solid #4CAF50;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      display: inline-block;
+      margin-right: 8px;
+      vertical-align: -15px;
+    }
+    
+    /* Estilos para autocompletado */
+    #search-suggestions {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      max-height: 300px;
+      overflow-y: auto;
+      z-index: 1001;
+      display: none;
+      margin-top: 4px;
+    }
+    
+    .suggestion-item {
+      padding: 12px 16px;
+      cursor: pointer;
+      border-bottom: 1px solid #f0f0f0;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      transition: background-color 0.2s;
+    }
+    
+    .suggestion-item:hover {
+      background-color: #f8f9fa;
+    }
+    
+    .suggestion-item:last-child {
+      border-bottom: none;
+    }
+    
+    .suggestion-icon {
+      width: 20px;
+      height: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+    }
+    
+    .suggestion-text {
+      flex: 1;
+      font-size: 14px;
+    }
+    
+    .suggestion-type {
+      font-size: 12px;
+      color: #666;
+      background: #f0f0f0;
+      padding: 2px 8px;
+      border-radius: 10px;
+    }
+    
+    .highlight {
+      background-color: #fff3cd;
+      font-weight: 600;
+    }
+    
+  /* Responsive */
+    @media (min-width: 768px) {
+      #search-container {
+        left: 50%;
+        transform: translateX(-50%);
+        right: auto;
+        width: 500px;
+      }
+      
+      #info {
+        left: 16px;
+        right: auto;
+        width: 350px;
+        border-radius: 16px;
+        bottom: 16px;
+      }
+      
+      #layer-panel {
+        right: 0;
+        left: auto;
+        width: 350px;
+        border-radius: 16px 0 0 16px;
+        max-height: calc(100vh - 32px);
+        top: 16px;
+        bottom: 16px;
+      }
+    }
+    
+    /* Ocultar controles predeterminados de Leaflet */
+    .leaflet-control-zoom,
+    .leaflet-control-layers,
+    .leaflet-control-attribution {
+      display: none !important;
+    }
+    
+    /* Estilos para marcadores */
+    .obra-marker-icon {
+      background: transparent;
+      border: none;
+    }
+    
+    .search-marker-icon {
+      background: transparent;
+      border: none;
+    }
+
+    /* Mejoras visuales para info */
+    .info-badge {
+      display: inline-block;
+      padding: 4px 10px;
+      background: #f0f0f0;
+      border-radius: 12px;
+      font-size: 12px;
+      margin: 4px 4px 4px 0;
+    }
+
+    .info-title {
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 12px;
+      color: #333;
+    }
+
+    .info-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 8px 0;
+      border-bottom: 1px solid #f0f0f0;
+    }
+
+    .info-label {
+      color: #666;
+      font-size: 13px;
+    }
+
+    .info-value {
+      color: #333;
+      font-weight: 500;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <!-- Cartel de advertencia -->
+  <div id="warning-overlay">
+    <div id="warning-box">
+      <div class="warning-icon"></div>
+      <div class="warning-title">Aviso importante</div>
+      <div class="warning-message">
+        Para visualizar correctamente los padrones catastrales, es necesario hacer zoom en el mapa.
+      </div>
+      <button class="warning-button" id="start-button">
+        <span class="loading-spinner" id="loading-spinner" style="display: none;"></span>
+        <span id="button-text">Entendido, continuar</span>
+      </button>
+    </div>
+  </div>
+
+  <div id="map"></div>
+  <div class="spinner" id="spinner"></div>
+  
+  <!-- Barra de búsqueda -->
+  <div id="search-container">
+    <div style="position: relative; flex: 1; margin-right: 8px; width: 100%;">
+      <input type="text" id="search-box" placeholder="🔍 Buscar dirección, lugar u obra..." style="width: 100%;">
+      <div id="search-suggestions"></div>
+    </div>
+    <button id="search-button">Ir</button>
+  </div>
+  
+  <!-- Controles flotantes -->
+  <div class="floating-controls" id="zoom-controls">
+    <button class="control-btn" id="zoom-in">+</button>
+    <button class="control-btn" id="zoom-out">−</button>
+  </div>
+  
+  <div class="floating-controls" id="layer-btn">
+    <button class="control-btn" id="layers-btn">🗂️</button>
+  </div>
+  
+  <div class="floating-controls" id="location-btn">
+    <button class="control-btn" id="locate-btn">📍</button>
+  </div>
+  
+  <!-- Panel de información -->
+  <div id="info">
+    <div id="info-handle"></div>
+    <div id="info-content">
+      <div style="text-align: center; color: #999; padding: 20px 0;">
+        Toca una obra en el mapa para ver información
+      </div>
+    </div>
+  </div>
+  
+  <!-- Overlay -->
+  <div id="overlay"></div>
+  
+  <!-- Panel de capas -->
+  <div id="layer-panel">
+    <div id="layer-panel-header">
+      <span id="layer-panel-title">Capas del mapa</span>
+      <button id="close-layers">×</button>
+    </div>
+    <div id="layer-list">
+      <div class="layer-item">
+        <label class="layer-toggle">
+          <input type="checkbox" id="obras-toggle" checked>
+          <span class="toggle-slider"></span>
+        </label>
+        <span class="layer-label">Obras IPVDU</span>
+      </div>
+      <div class="layer-item">
+        <label class="layer-toggle">
+          <input type="checkbox" id="parcelas-toggle" checked>
+          <span class="toggle-slider"></span>
+        </label>
+        <span class="layer-label">Parcelas</span>
+      </div>
+      <div class="layer-item">
+        <label class="layer-toggle">
+          <input type="checkbox" id="calles-toggle" checked>
+          <span class="toggle-slider"></span>
+        </label>
+        <span class="layer-label">Calles</span>
+      </div>
+      <div class="layer-item">
+        <label class="layer-toggle">
+          <input type="checkbox" id="localidades-toggle" checked>
+          <span class="toggle-slider"></span>
+        </label>
+        <span class="layer-label">Localidades</span>
+      </div>
+      <div class="layer-item">
+        <label class="layer-toggle">
+          <input type="checkbox" id="rutas-nacionales-toggle" checked>
+          <span class="toggle-slider"></span>
+        </label>
+        <span class="layer-label">Rutas Nacionales</span>
+      </div>
+      <div class="layer-item">
+        <label class="layer-toggle">
+          <input type="checkbox" id="rutas-provinciales-toggle" checked>
+          <span class="toggle-slider"></span>
+        </label>
+        <span class="layer-label">Rutas Provinciales</span>
+      </div>
+      <div class="layer-item">
+        <label class="layer-toggle">
+          <input type="checkbox" id="barrios-populares-toggle">
+          <span class="toggle-slider"></span>
+        </label>
+        <span class="layer-label">Barrios Populares</span>
+      </div>
+      <div class="layer-item">
+        <label class="layer-toggle">
+          <input type="checkbox" id="circuitos-electorales-toggle">
+          <span class="toggle-slider"></span>
+        </label>
+        <span class="layer-label">Circuitos Electorales</span>
+      </div>
+      <div class="layer-item">
+        <label class="layer-toggle">
+          <input type="checkbox" id="espacios-verdes-toggle">
+          <span class="toggle-slider"></span>
+        </label>
+        <span class="layer-label">Espacios Verdes</span>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="./obras_js.js"></script>
+
+  <script>
+    // Manejar el cartel de advertencia
+    document.getElementById('start-button').addEventListener('click', function() {
+      document.getElementById('button-text').textContent = 'Cargando mapa...';
+      document.getElementById('loading-spinner').style.display = 'inline-block';
+      this.disabled = true;
+      
+      setTimeout(function() {
+        document.getElementById('warning-overlay').style.display = 'none';
+      }, 800);
+    });
+
+    // Colores vibrantes para obras
+    function generarColorAleatorio() {
+      const colores = [
+        '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7',
+        '#DDA0DD', '#98D8C8', '#F7DC6F', '#BB8FCE', '#85C1E9',
+        '#82E0AA', '#D7BDE2', '#F9E79F', '#A9DFBF', '#AED6F1',
+        '#E8DAEF', '#FAD7A0', '#ABEBC6', '#A9CCE3', '#D2B4DE'
+      ];
+      return colores[Math.floor(Math.random() * colores.length)];
+    }
+
+    const coloresObras = {};
+
+    function obtenerColorParaObra(obraId) {
+      if (!coloresObras[obraId]) {
+        coloresObras[obraId] = generarColorAleatorio();
+      }
+      return coloresObras[obraId];
+    }
+
+    // Inicializar mapa
+    const map = L.map('map', {
+      maxZoom: 22,
+      zoomControl: false,
+      attributionControl: false
+    }).setView([-26.8241, -65.2226], 12);
+
+    // Capa base
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 22
+    }).addTo(map);
+
+    // Capas WMS usando Leaflet nativo
+    function addWMSLayer(url, layerName) {
+      return L.tileLayer.wms(url, {
+        layers: layerName,
+        format: 'image/png',
+        transparent: true,
+        maxZoom: 22,
+        version: '1.1.0'
+      });
+    }
+
+    const wmsUrl = 'https://mapas.catastrotucuman.gov.ar/geoserver/dgct/wms';
+
+    const capas = {
+      'Parcelas': addWMSLayer(wmsUrl, 'dgct:PARCELASR'),
+      'Calles': addWMSLayer(wmsUrl, 'dgct:calles'),
+      'Localidades': addWMSLayer(wmsUrl, 'dgct:localidades'),
+      'Rutas Nacionales': addWMSLayer(wmsUrl, 'dgct:rutas_nacionales'),
+      'Rutas Provinciales': addWMSLayer(wmsUrl, 'dgct:rutas_provinciales'),
+      'Circuitos Electorales': addWMSLayer(wmsUrl, 'dgct:CIRCUITOS_ELECTORALES_2020'),
+      'Espacios Verdes': addWMSLayer(wmsUrl, 'dgct:espacios_verdes'),
+      'Barrios Populares': addWMSLayer(wmsUrl, 'dgc:BARRIOS_POPULARES')
+    };
+
+    // Activar capas por defecto
+    ['Parcelas', 'Calles', 'Localidades', 'Rutas Nacionales', 'Rutas Provinciales'].forEach(capa => {
+      capas[capa].addTo(map);
+    });
+
+    // Capa de obras
+    let obrasLayer;
+    if (typeof json_OBRAS_IPVDU_0 !== 'undefined') {
+      obrasLayer = L.geoJSON(json_OBRAS_IPVDU_0, {
+        style: function(feature) {
+          const obraId = feature.properties.ID || 
+                        feature.properties.CODIGO_IPV || 
+                        feature.properties.NOMBRE || 
+                        Math.random().toString();
+          
+          const colorObra = obtenerColorParaObra(obraId);
+          
+          return {
+            color: colorObra,
+            weight: 3,
+            fillColor: colorObra,
+            fillOpacity: 0.3,
+            opacity: 0.8
+          };
+        },
+        pointToLayer: function(feature, latlng) {
+          const obraId = feature.properties.ID || 
+                        feature.properties.CODIGO_IPV || 
+                        feature.properties.NOMBRE || 
+                        Math.random().toString();
+          
+          const colorObra = obtenerColorParaObra(obraId);
+          
+          if (feature.geometry.type === 'Point') {
+            return L.marker(latlng, {
+              icon: L.divIcon({
+                className: 'obra-marker-icon',
+                html: `<div style="background-color: ${colorObra}; width: 14px; height: 14px; border-radius: 50%; border: 3px solid white; box-shadow: 0 2px 8px rgba(0,0,0,0.4);"></div>`,
+                iconSize: [20, 20]
+              })
+            });
+          }
+          return L.polygon(latlng);
+        }
+      }).addTo(map);
+
+      // Mostrar información al hacer clic
+      obrasLayer.on('click', function(e) {
+        const props = e.layer.feature.properties;
+        const obraId = props.ID || props.CODIGO_IPV || props.NOMBRE || 'desconocido';
+        const colorObra = coloresObras[obraId] || '#0066ff';
+        
+        document.getElementById('info-content').innerHTML = `
+          <div class="info-title">${props.NOMBRE || 'Sin nombre'}</div>
+          <div class="info-row">
+            <span class="info-label">Localidad</span>
+            <span class="info-value">${props.LOCALIDAD || 'No disponible'}</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Departamento</span>
+            <span class="info-value">${props.DPTO || 'No disponible'}</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Código IPV</span>
+            <span class="info-value">${props.CODIGO_IPV || 'No disponible'}</span>
+          </div>
+          <div style="margin-top: 12px;">
+            <span class="info-badge" style="background-color: ${colorObra}20; color: ${colorObra}; border: 1px solid ${colorObra};">● Color identificador</span>
+          </div>
+        `;
+        
+        document.getElementById('info').classList.add('expanded');
+        L.DomEvent.stopPropagation(e);
+      });
+    }
+
+    // Controles de zoom
+    document.getElementById('zoom-in').addEventListener('click', () => map.zoomIn());
+    document.getElementById('zoom-out').addEventListener('click', () => map.zoomOut());
+
+    // Geolocalización
+    document.getElementById('locate-btn').addEventListener('click', function() {
+      if ('geolocation' in navigator) {
+        document.getElementById('spinner').style.display = 'block';
+        navigator.geolocation.getCurrentPosition(
+          position => {
+            const lat = position.coords.latitude;
+            const lon = position.coords.longitude;
+            map.setView([lat, lon], 16);
+            
+            if (window.locationMarker) {
+              map.removeLayer(window.locationMarker);
+            }
+            
+            window.locationMarker = L.marker([lat, lon], {
+              icon: L.divIcon({
+                className: 'search-marker-icon',
+                html: '<div style="background-color: #2196F3; width: 16px; height: 16px; border-radius: 50%; border: 4px solid white; box-shadow: 0 0 0 4px rgba(33, 150, 243, 0.3), 0 2px 10px rgba(0,0,0,0.3);"></div>',
+                iconSize: [24, 24]
+              })
+            }).addTo(map);
+            
+            document.getElementById('spinner').style.display = 'none';
+          },
+          error => {
+            alert('No se pudo obtener tu ubicación');
+            document.getElementById('spinner').style.display = 'none';
+          }
+        );
+      } else {
+        alert('Tu dispositivo no soporta geolocalización');
+      }
+    });
+
+    // Función para buscar obras por nombre
+    function buscarObras(query) {
+      const resultados = [];
+      if (typeof json_OBRAS_IPVDU_0 !== 'undefined') {
+        json_OBRAS_IPVDU_0.features.forEach(feature => {
+          const nombre = feature.properties.NOMBRE || '';
+          const localidad = feature.properties.LOCALIDAD || '';
+          const codigo = feature.properties.CODIGO_IPV || '';
+          
+          if (nombre.toLowerCase().includes(query.toLowerCase()) || 
+              localidad.toLowerCase().includes(query.toLowerCase()) ||
+              codigo.toLowerCase().includes(query.toLowerCase())) {
+            
+            const x = parseFloat(feature.properties.X);
+            const y = parseFloat(feature.properties.Y);
+            
+            if (!isNaN(x) && !isNaN(y)) {
+              resultados.push({
+                type: 'obra',
+                name: nombre,
+                localidad: localidad,
+                codigo: codigo,
+                lat: y,
+                lon: x,
+                display_name: `${nombre} - ${localidad}`,
+                feature: feature
+              });
+            }
+          }
+        });
+      }
+      return resultados;
+    }
+
+    // Función para buscar lugares usando Nominatim (OpenStreetMap)
+    async function buscarLugares(query) {
+      try {
+        const nominatimUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query + ', Tucumán, Argentina')}&limit=5&addressdetails=1`;
+        
+        const response = await fetch(nominatimUrl);
+        const data = await response.json();
+        
+        return data.map(result => ({
+          type: 'lugar',
+          name: result.display_name.split(',')[0],
+          display_name: result.display_name,
+          lat: parseFloat(result.lat),
+          lon: parseFloat(result.lon)
+        }));
+      } catch (error) {
+        console.error('Error en búsqueda de lugares:', error);
+        return [];
+      }
+    }
+
+    // Función para mostrar sugerencias
+    function mostrarSugerencias(sugerencias) {
+      const suggestionsContainer = document.getElementById('search-suggestions');
+      suggestionsContainer.innerHTML = '';
+      
+      if (sugerencias.length === 0) {
+        suggestionsContainer.style.display = 'none';
+        return;
+      }
+
+      sugerencias.forEach((sugerencia, index) => {
+        const item = document.createElement('div');
+        item.className = 'suggestion-item';
+        
+        const icon = document.createElement('div');
+        icon.className = 'suggestion-icon';
+        icon.textContent = sugerencia.type === 'obra' ? '🏗️' : '📍';
+        
+        const text = document.createElement('div');
+        text.className = 'suggestion-text';
+        text.textContent = sugerencia.display_name || sugerencia.name;
+        
+        const type = document.createElement('div');
+        type.className = 'suggestion-type';
+        type.textContent = sugerencia.type === 'obra' ? 'Obra' : 'Lugar';
+        
+        item.appendChild(icon);
+        item.appendChild(text);
+        item.appendChild(type);
+        
+        item.addEventListener('click', () => {
+          seleccionarSugerencia(sugerencia);
+          suggestionsContainer.style.display = 'none';
+        });
+        
+        suggestionsContainer.appendChild(item);
+      });
+      
+      suggestionsContainer.style.display = 'block';
+    }
+
+    // Función para seleccionar una sugerencia
+    function seleccionarSugerencia(sugerencia) {
+      document.getElementById('spinner').style.display = 'block';
+      
+      if (window.searchMarker) {
+        map.removeLayer(window.searchMarker);
+      }
+      
+      const lat = sugerencia.lat;
+      const lon = sugerencia.lon;
+      
+      // Crear marcador según el tipo
+      let markerColor, markerText;
+      if (sugerencia.type === 'obra') {
+        markerColor = '#4CAF50';
+        markerText = '🏗️';
+      } else {
+        markerColor = '#FF5722';
+        markerText = '📍';
+      }
+      
+      window.searchMarker = L.marker([lat, lon], {
+        icon: L.divIcon({
+          className: 'search-marker-icon',
+          html: `<div style="background-color: ${markerColor}; width: 16px; height: 16px; border-radius: 50%; border: 4px solid white; box-shadow: 0 2px 10px rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; font-size: 12px;">${markerText}</div>`,
+          iconSize: [24, 24]
+        })
+      }).addTo(map);
+      
+      map.setView([lat, lon], 16);
+      
+      // Mostrar información
+      if (sugerencia.type === 'obra') {
+        const props = sugerencia.feature.properties;
+        const obraId = props.ID || props.CODIGO_IPV || props.NOMBRE || 'desconocido';
+        const colorObra = coloresObras[obraId] || '#0066ff';
+        
+        document.getElementById('info-content').innerHTML = `
+          <div class="info-title">${props.NOMBRE || 'Sin nombre'}</div>
+          <div class="info-row">
+            <span class="info-label">Localidad</span>
+            <span class="info-value">${props.LOCALIDAD || 'No disponible'}</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Departamento</span>
+            <span class="info-value">${props.DPTO || 'No disponible'}</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Código IPV</span>
+            <span class="info-value">${props.CODIGO_IPV || 'No disponible'}</span>
+          </div>
+          <div style="margin-top: 12px;">
+            <span class="info-badge" style="background-color: ${colorObra}20; color: ${colorObra}; border: 1px solid ${colorObra};">● Color identificador</span>
+          </div>
+        `;
+      } else {
+        document.getElementById('info-content').innerHTML = `
+          <div class="info-title">Ubicación encontrada</div>
+          <p style="color: #666; margin-top: 8px;">${sugerencia.display_name || sugerencia.name}</p>
+        `;
+      }
+      
+      document.getElementById('info').classList.add('expanded');
+      document.getElementById('spinner').style.display = 'none';
+    }
+
+    // Función principal de búsqueda con sugerencias
+    async function buscarConSugerencias() {
+      const query = document.getElementById('search-box').value.trim();
+      if (!query) {
+        document.getElementById('search-suggestions').style.display = 'none';
+        return;
+      }
+      
+      // Buscar obras localmente
+      const obrasResults = buscarObras(query);
+      
+      // Buscar lugares usando Nominatim
+      const lugaresResults = await buscarLugares(query);
+      
+      // Combinar resultados
+      const allResults = [...obrasResults, ...lugaresResults];
+      
+      // Limitar a 8 sugerencias
+      mostrarSugerencias(allResults.slice(0, 8));
+    }
+
+
+
+    // Función de búsqueda directa (cuando se presiona Enter o el botón)
+    async function buscarDireccion() {
+      const query = document.getElementById('search-box').value.trim();
+      if (!query) return;
+      
+      document.getElementById('search-suggestions').style.display = 'none';
+      document.getElementById('spinner').style.display = 'block';
+      
+      // Primero buscar obras
+      const obrasResults = buscarObras(query);
+      if (obrasResults.length > 0) {
+        seleccionarSugerencia(obrasResults[0]);
+        return;
+      }
+      
+      // Si no hay obras, buscar lugares
+      const lugaresResults = await buscarLugares(query);
+      if (lugaresResults.length > 0) {
+        seleccionarSugerencia(lugaresResults[0]);
+        return;
+      }
+      
+      document.getElementById('spinner').style.display = 'none';
+      alert('No se encontraron resultados');
+    }
+
+    // Event listeners
+    let searchTimeout;
+    document.getElementById('search-box').addEventListener('input', (e) => {
+      clearTimeout(searchTimeout);
+      searchTimeout = setTimeout(() => {
+        buscarConSugerencias();
+      }, 300); // Esperar 300ms después de dejar de escribir
+    });
+
+    document.getElementById('search-box').addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        buscarDireccion();
+      }
+    });
+
+    document.getElementById('search-button').addEventListener('click', buscarDireccion);
+
+    // Cerrar sugerencias al hacer clic fuera
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('#search-container')) {
+        document.getElementById('search-suggestions').style.display = 'none';
+      }
+    });
+
+    // Panel de capas
+    document.getElementById('layers-btn').addEventListener('click', () => {
+      document.getElementById('layer-panel').classList.add('active');
+      document.getElementById('overlay').classList.add('active');
+    });
+
+    document.getElementById('close-layers').addEventListener('click', () => {
+      document.getElementById('layer-panel').classList.remove('active');
+      document.getElementById('overlay').classList.remove('active');
+    });
+
+    document.getElementById('overlay').addEventListener('click', () => {
+      document.getElementById('layer-panel').classList.remove('active');
+      document.getElementById('overlay').classList.remove('active');
+    });
+
+    // Controles de capas
+    const layerControls = {
+      'obras-toggle': obrasLayer,
+      'parcelas-toggle': capas['Parcelas'],
+      'calles-toggle': capas['Calles'],
+      'localidades-toggle': capas['Localidades'],
+      'rutas-nacionales-toggle': capas['Rutas Nacionales'],
+      'rutas-provinciales-toggle': capas['Rutas Provinciales'],
+      'barrios-populares-toggle': capas['Barrios Populares'],
+      'circuitos-electorales-toggle': capas['Circuitos Electorales'],
+      'espacios-verdes-toggle': capas['Espacios Verdes']
+    };
+
+    Object.keys(layerControls).forEach(toggleId => {
+      const element = document.getElementById(toggleId);
+      if (element) {
+        element.addEventListener('change', function() {
+          const layer = layerControls[toggleId];
+          if (layer) {
+            if (this.checked) {
+              layer.addTo(map);
+            } else {
+              map.removeLayer(layer);
+            }
+          }
+        });
+      }
+    });
+
+    // Expandir/contraer panel de info
+    document.getElementById('info-handle').addEventListener('click', () => {
+      document.getElementById('info').classList.toggle('expanded');
+    });
+
+    // Contraer info al tocar el mapa
+    map.on('click', () => {
+      setTimeout(() => {
+        const info = document.getElementById('info');
+        if (!info.matches(':hover')) {
+          info.classList.remove('expanded');
+        }
+      }, 100);
+    });
+  </script>
+</body>
+</html>
