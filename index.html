@@ -523,6 +523,53 @@
       border: none;
     }
 
+    /* Cartel hint de geolocalización */
+    #location-hint {
+      position: absolute;
+      right: 72px;
+      bottom: 40px;
+      z-index: 1100;
+      background: #1565C0;
+      color: white;
+      padding: 10px 14px;
+      border-radius: 12px;
+      font-size: 13px;
+      font-weight: 500;
+      white-space: nowrap;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      animation: hintPulse 2.5s ease-in-out infinite;
+      pointer-events: none;
+    }
+
+    #location-hint::after {
+      content: '';
+      position: absolute;
+      right: -8px;
+      top: 50%;
+      transform: translateY(-50%);
+      border-width: 8px 0 8px 8px;
+      border-style: solid;
+      border-color: transparent transparent transparent #1565C0;
+    }
+
+    @keyframes hintPulse {
+      0%, 100% { opacity: 1; transform: translateX(0); }
+      50% { opacity: 0.85; transform: translateX(-3px); }
+    }
+
+    #location-hint .hint-icon {
+      font-size: 18px;
+      animation: bounce 1.2s ease-in-out infinite;
+    }
+
+    @keyframes bounce {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-3px); }
+    }
+
     /* Mejoras visuales para info */
     .info-badge {
       display: inline-block;
@@ -600,6 +647,12 @@
   <div class="floating-controls" id="location-btn">
     <button class="control-btn" id="locate-btn">📍</button>
   </div>
+
+  <!-- Cartel hint: buscar posición actual -->
+  <div id="location-hint">
+    <span class="hint-icon">📍</span>
+    Presioná aquí para encontrar tu posición
+  </div>
   
   <!-- Panel de información -->
   <div id="info">
@@ -621,6 +674,13 @@
       <button id="close-layers">×</button>
     </div>
     <div id="layer-list">
+      <div class="layer-item">
+        <label class="layer-toggle">
+          <input type="checkbox" id="satelital-toggle">
+          <span class="toggle-slider"></span>
+        </label>
+        <span class="layer-label">🛰️ Vista Satelital (Google)</span>
+      </div>
       <div class="layer-item">
         <label class="layer-toggle">
           <input type="checkbox" id="obras-toggle" checked>
@@ -779,33 +839,44 @@
       map.setView([-26.8241, -65.2226], 12);
     }
 
-    // Capa base
+    // Capa base OSM (zIndex 1)
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 22
+      maxZoom: 22,
+      zIndex: 1
     }).addTo(map);
 
-    // Capas WMS usando Leaflet nativo
-    function addWMSLayer(url, layerName) {
+    // Capa satelital de Google Maps (desactivada por defecto, zIndex 2)
+    // Queda por encima del OSM pero debajo de todas las capas WMS
+    const googleSatelital = L.tileLayer('https://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
+      maxZoom: 22,
+      subdomains: ['mt0', 'mt1', 'mt2', 'mt3'],
+      attribution: '© Google',
+      zIndex: 2
+    });
+
+    // Capas WMS usando Leaflet nativo (zIndex 3+, siempre encima del satelital)
+    function addWMSLayer(url, layerName, zIdx) {
       return L.tileLayer.wms(url, {
         layers: layerName,
         format: 'image/png',
         transparent: true,
         maxZoom: 22,
-        version: '1.1.0'
+        version: '1.1.0',
+        zIndex: zIdx || 3
       });
     }
 
     const wmsUrl = 'https://mapas.catastrotucuman.gov.ar/geoserver/dgct/wms';
 
     const capas = {
-      'Parcelas': addWMSLayer(wmsUrl, 'dgct:PARCELASR'),
-      'Calles': addWMSLayer(wmsUrl, 'dgct:calles'),
-      'Localidades': addWMSLayer(wmsUrl, 'dgct:localidades'),
-      'Rutas Nacionales': addWMSLayer(wmsUrl, 'dgct:rutas_nacionales'),
-      'Rutas Provinciales': addWMSLayer(wmsUrl, 'dgct:rutas_provinciales'),
-      'Circuitos Electorales': addWMSLayer(wmsUrl, 'dgct:CIRCUITOS_ELECTORALES_2020'),
-      'Espacios Verdes': addWMSLayer(wmsUrl, 'dgct:espacios_verdes'),
-      'Barrios Populares': addWMSLayer(wmsUrl, 'dgc:BARRIOS_POPULARES')
+      'Parcelas': addWMSLayer(wmsUrl, 'dgct:PARCELASR', 4),
+      'Calles': addWMSLayer(wmsUrl, 'dgct:calles', 5),
+      'Localidades': addWMSLayer(wmsUrl, 'dgct:localidades', 6),
+      'Rutas Nacionales': addWMSLayer(wmsUrl, 'dgct:rutas_nacionales', 7),
+      'Rutas Provinciales': addWMSLayer(wmsUrl, 'dgct:rutas_provinciales', 8),
+      'Circuitos Electorales': addWMSLayer(wmsUrl, 'dgct:CIRCUITOS_ELECTORALES_2020', 9),
+      'Espacios Verdes': addWMSLayer(wmsUrl, 'dgct:espacios_verdes', 10),
+      'Barrios Populares': addWMSLayer(wmsUrl, 'dgc:BARRIOS_POPULARES', 11)
     };
 
     // Activar capas por defecto
@@ -890,6 +961,10 @@
 
     // Geolocalización
     document.getElementById('locate-btn').addEventListener('click', function() {
+      // Ocultar el cartel hint al usar el botón
+      const hint = document.getElementById('location-hint');
+      if (hint) hint.style.display = 'none';
+
       if ('geolocation' in navigator) {
         document.getElementById('spinner').style.display = 'block';
         navigator.geolocation.getCurrentPosition(
@@ -1176,6 +1251,7 @@
 
     // Controles de capas
     const layerControls = {
+      'satelital-toggle': googleSatelital,
       'obras-toggle': obrasLayer,
       'parcelas-toggle': capas['Parcelas'],
       'calles-toggle': capas['Calles'],
@@ -1208,6 +1284,26 @@
       document.getElementById('info').classList.toggle('expanded');
     });
 
+    // Ocultar cartel hint automáticamente después de 8 segundos
+    // o cuando el usuario toca el mapa por primera vez
+    const locationHint = document.getElementById('location-hint');
+    const hintTimer = setTimeout(() => {
+      if (locationHint) {
+        locationHint.style.transition = 'opacity 0.6s ease';
+        locationHint.style.opacity = '0';
+        setTimeout(() => { locationHint.style.display = 'none'; }, 600);
+      }
+    }, 8000);
+
+    map.once('click movestart', () => {
+      clearTimeout(hintTimer);
+      if (locationHint) {
+        locationHint.style.transition = 'opacity 0.4s ease';
+        locationHint.style.opacity = '0';
+        setTimeout(() => { locationHint.style.display = 'none'; }, 400);
+      }
+    });
+
     // Contraer info al tocar el mapa
     map.on('click', () => {
       setTimeout(() => {
@@ -1220,3 +1316,4 @@
   </script>
 </body>
 </html>
+
